@@ -52,21 +52,58 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
 const { useState, useEffect, useMemo, useRef } = React;
 const { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, AreaChart, Area, LineChart, Line } = Recharts;
 
-// Lucide icon helper
+// Lucide icon helper - robust to different lucide build formats
 const Icon = ({ name, className = "", size = 16, strokeWidth = 2 }) => {
   const ref = React.useRef(null);
   React.useEffect(() => {
-    if (ref.current && window.lucide) {
+    if (!ref.current || !window.lucide) return;
+
+    // Lucide can expose icons in different shapes depending on build version:
+    // - window.lucide.icons (object with all icons, keys may be kebab-case or PascalCase)
+    // - window.lucide.IconName directly on the module
+    // - kebab-case "x" vs PascalCase "X" vs "HelpCircle"
+    const tryKeys = [
+      name,                                                                  // "x", "trash-2"
+      name.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(''), // "Trash2", "X"
+      name.charAt(0).toUpperCase() + name.slice(1)                            // "X", "Plus"
+    ];
+
+    let iconNode = null;
+    const sources = [window.lucide.icons, window.lucide];
+
+    for (const src of sources) {
+      if (!src) continue;
+      for (const k of tryKeys) {
+        if (src[k]) { iconNode = src[k]; break; }
+      }
+      if (iconNode) break;
+    }
+
+    // Fallback: help-circle
+    if (!iconNode) {
+      const fb = window.lucide.icons || window.lucide;
+      iconNode = fb['help-circle'] || fb.HelpCircle || fb.helpCircle;
+    }
+
+    if (!iconNode) {
       ref.current.innerHTML = '';
-      const svg = window.lucide.createElement(window.lucide.icons[name] || window.lucide.icons.HelpCircle);
+      return;
+    }
+
+    try {
+      const svg = window.lucide.createElement(iconNode);
       svg.setAttribute('width', size);
       svg.setAttribute('height', size);
       svg.setAttribute('stroke-width', strokeWidth);
-      svg.setAttribute('class', className);
+      if (className) svg.setAttribute('class', className);
+      ref.current.innerHTML = '';
       ref.current.appendChild(svg);
+    } catch (e) {
+      // Last resort: render a small dot so layout doesn't break
+      ref.current.innerHTML = '';
     }
   }, [name, className, size, strokeWidth]);
-  return <span ref={ref} style={{ display: 'inline-flex' }} />;
+  return <span ref={ref} style={{ display: 'inline-flex', width: size, height: size }} />;
 };
 
 const STORAGE_KEY = "atlantis_v3";
